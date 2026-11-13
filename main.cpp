@@ -1,6 +1,8 @@
 #include<iostream>
 #include<string>
 #include<vector>
+#include<fstream>
+#include<algorithm>
 #include<iomanip>
 #include <stdexcept>
 #include<limits>
@@ -110,6 +112,8 @@ class Parcel {
          }
          Parcel& operator++(){
             if(status=="REGISTERED") status = "DISPATCHED";
+            else if(status=="DISPATCHED") status = "IN TRANSIT";
+            else if(status=="IN TRANSIT") status = "DELIVERED";
             return *this;
          }
          friend void inspectParcel(const Parcel &p);
@@ -241,6 +245,10 @@ void inspectParcel(const Parcel &p){
     cout<<"Status: "<<p.status<<endl;
     cout<<"Distance Factor: "<<p.distanceFactor<<endl;
 };
+template<typename T>
+void displayRecordCount(const vector<T>&records,const string & label){
+    cout<<label<<":"<<records.size()<<endl;
+}
 class ChronoPostSystem {
     private:
         vector<Customer> customers;
@@ -266,6 +274,17 @@ class ChronoPostSystem {
             }
             return nullptr;
         }
+        void recordTracking(int parcelId, const string &event){
+            ofstream file("tracking.txt",ios::app);
+            if(file.is_open()){
+                file<<"Parcel ID: "<<parcelId<<", Event: "<<event<<endl;
+                file.close();
+            }
+            else{
+                cout<<"\nUnable to open tracking file\n";
+            }
+        }
+
     public:
        ChronoPostSystem() {
             nextCustomerID = 1001;
@@ -274,6 +293,7 @@ class ChronoPostSystem {
             dimensions.push_back({"Future-Earth",2050,1.5});
             dimensions.push_back({"Neo-Terra",3026,2.5});
             dimensions.push_back({"Parallel-7",2026,3.0});
+            loadData();
 
         }
         ~ChronoPostSystem() {
@@ -432,6 +452,7 @@ class ChronoPostSystem {
             for(const auto &c:customers){
                 c.display();
             }
+            displayRecordCount(customers, "Total customers");
 
 
        }
@@ -444,6 +465,7 @@ class ChronoPostSystem {
             for(const auto &p:parcels){
                 p->display();
             }
+            displayRecordCount(parcels, "Total parcels");
        }
        void displayDimensions() const {
             cout<<"\nRegistered Dimensions:\n";
@@ -451,6 +473,7 @@ class ChronoPostSystem {
             for(const auto &d:dimensions){
                 cout<<left<<setw(22)<<d.name<<d.timelineYear<<setw(12)<<d.distanceFactor<<endl;
             }
+            displayRecordCount(dimensions, "Total dimensions");
        }
        void advanceParcel(){
         int id;
@@ -465,6 +488,7 @@ class ChronoPostSystem {
             if(p->getId()==id){
                 ++(*p);
                 cout<<"\nParcel status advanced to: "<<p->getStatus()<<endl;
+                recordTracking(id, p->getStatus());
                 return;
             }
         }
@@ -499,7 +523,100 @@ class ChronoPostSystem {
         ShippingBill total = bill1 + bill2;
         cout<<"\nTotal bill: "<<static_cast<double>(total)<<endl;
        }
-      
+       void loadData(){
+        ifstream CustomerFile("customers.txt");
+        if(CustomerFile.is_open()){
+            customers.clear();
+            int id;
+            string name,home;
+            while(CustomerFile>>id>>quoted(name)>>quoted(home)){
+                customers.emplace_back(id,name,home);
+                if(id>=nextCustomerID){
+                    nextCustomerID=id+1;
+                }
+            }
+            CustomerFile.close();
+       }
+       ifstream dimensionFile("dimensions.txt");
+       if(dimensionFile.is_open()){
+        dimensions.clear();
+       Dimension d;
+        while(dimensionFile>>quoted(d.name)>>d.timelineYear>>d.distanceFactor){
+            dimensions.push_back(d);
+        }
+        dimensionFile.close();
+        if(dimensions.empty()){
+            dimensions.push_back({"Earth-Prime",2026,1.0});
+            dimensions.push_back({"Future-Earth",2050,1.5});
+            dimensions.push_back({"Neo-Terra",3026,2.5});
+            dimensions.push_back({"Parallel-7",2026,3.0});
+        }
+       }
+       ifstream parcelFile("parcels.txt");
+       if(parcelFile.is_open()){
+        int id,sid;
+        string type,recipient,destination,status;
+        double weight,df;
+        while(parcelFile>>id>>sid>>quoted(recipient)>>quoted(destination)>>weight>>df>>quoted(status)>>quoted(type)){
+            Parcel *p=nullptr;
+            if(type=="Normal"){
+                p=new NormalParcel(id,sid,recipient,destination,weight,df);
+            }
+            else if(type=="Fragile"){
+                p=new FragileParcel(id,sid,recipient,destination,weight,df);
+            }
+            else if(type=="TimeBound"){
+                p=new TimeBoundParcel(id,sid,recipient,destination,weight,df);
+            }
+            else if(type=="Interdimensional"){
+                p=new InterdimensionalParcel(id,sid,recipient,destination,weight,df);
+            }
+            if(p!=nullptr){
+                p->status=status;
+                parcels.push_back(p);
+                if(id>=nextParcelID){
+                    nextParcelID=id+1;
+                }
+            }
+        }
+        parcelFile.close();
+    }
+}
+
+       void saveData() const {
+        ofstream CustomerFile("customers.txt");
+        if(CustomerFile.is_open()){
+            for(auto it = customers.begin(); it != customers.end(); ++it){
+                CustomerFile<<it->getID()<<" "<<quoted(it->getName())<<" "<<quoted(it->getHomeDimension())<<endl;
+            }
+            CustomerFile.close();
+        }
+        else cout<<"\nUnable to open customers.txt for writing\n";
+        ofstream dimensionFile("dimensions.txt");
+        if(dimensionFile.is_open()){
+            for(auto it = dimensions.begin(); it != dimensions.end(); ++it){
+                dimensionFile<<quoted(it->name)<<" "<<it->timelineYear<<" "<<it->distanceFactor<<endl;
+            }
+            dimensionFile.close();
+        }
+        else cout<<"\nUnable to open dimensions.txt for writing\n";
+        ofstream parcelFile("parcels.txt");
+        if(parcelFile.is_open()){
+            for(auto it = parcels.begin(); it != parcels.end(); ++it){
+                parcelFile<<(*it)->getId()<<" "<<(*it)->senderID<<" "<<quoted((*it)->recipientName)<<" "<<quoted((*it)->destinantion)<<" "<<(*it)->weight<<" "<<(*it)->distanceFactor<<" "<<quoted((*it)->status)<<" ";
+              if(dynamic_cast<InterdimensionalParcel*>(*it))
+                 parcelFile << quoted("Interdimensional") << endl;
+              else if(dynamic_cast<FragileParcel*>(*it))
+                  parcelFile << quoted("Fragile") << endl;
+             else if(dynamic_cast<TimeBoundParcel*>(*it))
+                   parcelFile << quoted("TimeBound") << endl;
+            else if(dynamic_cast<NormalParcel*>(*it))
+                  parcelFile << quoted("Normal") << endl;
+            }
+            parcelFile.close();
+        }
+        else cout<<"\nUnable to open parcels.txt for writing\n";
+       }
        void menu (){
         int choice;
         do{
@@ -527,12 +644,7 @@ class ChronoPostSystem {
     cin.ignore(numeric_limits<streamsize>::max(), '\n');
     continue;
 }
-if(!(cin >> choice)) {
-    cout << "\nPlease enter a valid numeric choice.\n";
-    cin.clear();
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
-    continue;
-}
+
            
             switch (choice) {
                 case 1:
@@ -563,6 +675,7 @@ if(!(cin >> choice)) {
                     showBill();
                     break;
                 case 0:
+                    saveData();
                     cout << "\nExiting ChronoPost. Goodbye!\n";
                     break;
                 default:
