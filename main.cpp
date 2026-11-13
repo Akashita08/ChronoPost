@@ -43,7 +43,7 @@ class Customer{
 
 };
 class Parcel {
-    private:
+    protected:
      int parcelID;
      int senderID;
      string recipientName;
@@ -59,29 +59,170 @@ class Parcel {
             weight=0.0;
             status="Registered";
         }
-        Parcel(int pid,int sid,string rname,string dest,double w,string s){
+        Parcel(int pid,int sid,string rname,string dest,double w){
             parcelID=pid;
             senderID=sid;
             recipientName=rname;
             destinantion=dest;
             weight=w;
-            status=s;
+            status="Registered";
         }
      
-        ~Parcel(){
+       virtual ~Parcel(){
         }
+        virtual double calculateCharge() const{
+            return weight*10.0;
+        }
+
         int getId() const {
                 return parcelID;
             }
-        
-         void display() const {
+        string getStatus() const {
+                return status;
+            }
+        virtual  void display() const {
              cout<<left<<setw(12)<<parcelID<<setw(12)<<senderID<<setw(22)<<recipientName<<setw(22)<<destinantion<<setw(12)<<weight<<status<<endl;
          }
+         Parcel& operator++(){
+            if(status=="REGISTERED") status = "DISPATCHED";
+            return *this;
+         }
+         friend void inspectPracel(const Parcel &p);
+         friend class ChronoPostSystem;
+         friend class ChronoPostAdmin;
+};
+class NormalParcel : public Parcel {
+    public:
+     NormalParcel(int id,int sid,string rname,string dest,double w):Parcel(id,sid,rname,dest,w){
+        
+     }
+     double calculateCharge() const override {
+        return weight * 10.0;
+    }
+    void display() const override{
+        cout<<"Normal Parcel: ";
+        Parcel::display();
+    }
+};
+class Fragile: virtual public Parcel {
+    public:
+     Fragile() {}
+     double protectionCharge() const {
+        return weight * 5.0;
+     }
+
+};
+class TimeBound : virtual public Parcel {
+    public: 
+     TimeBound(){}
+     double urgencyCharge() const {
+        return weight * 8.0;
+     }
+};
+class FragileParcel : public Fragile {
+   public:
+    FragileParcel(int id,int sid,string rname,string dest,double w):Parcel(id,sid,rname,dest,w){
+        
+     }
+     double calculateCharge() const override {
+        return weight * 10.0 + protectionCharge();
+    }
+    void display() const override{
+        cout<<"Fragile Parcel: ";
+        Parcel::display();
+    }
+};
+class TimeBoundParcel : public TimeBound {
+    public:
+     TimeBoundParcel(int id,int sid,string rname,string dest,double w):Parcel(id,sid,rname,dest,w){
+        
+     }
+     double calculateCharge() const override {
+        return weight * 10.0 + urgencyCharge();
+    }
+    void display() const override{
+        cout<<"Time Bound Parcel: ";
+        Parcel::display();
+    }
+};
+
+class InterdimensionalParcel : public Fragile,public TimeBound {
+    public:
+     InterdimensionalParcel(int id,int sid,string rname,string dest,double w):Parcel(id,sid,rname,dest,w){
+        
+     }
+     double calculateCharge() const override {
+        return weight * 10.0 + protectionCharge() + urgencyCharge();
+    }
+    void display() const override{
+        cout<<"Interdimensional Parcel: ";
+        Parcel::display();
+    }
+};
+class SpecialParcel : public Fragile,public TimeBound{
+    public: 
+     SpecialParcel(int id,int sid,string rname,string dest,double w){
+        parcelID=id;
+        senderID=sid;
+        recipientName=rname;
+        destinantion=dest;
+        weight=w;
+        status="Registered";
+        
+     }
+     void displaySpecial(){
+        cout<<"Special Parcel: ";
+        cout<<"Parcel ID"<< parcelID<<"Sender ID"<<senderID<<"Recipient Name"<<recipientName<<"Destination"<<destinantion<<"Weight"<<weight<<"Status"<<status<<endl;
+
+     }
+     
+};
+class EmptyClass {};
+class ShippingBill {
+    public:
+     double amount;
+     ShippingBill(double amt=0){
+        amount=amt;
+     }
+    operator double() const {
+        return amount;
+    }
+
+
+};
+class Weight{
+    public:
+     double kg;
+     Weight(double w=0){
+        kg=w;
+     }
+     operator double() const {
+        return kg;
+}
+};
+class ChronoPostAdmin{
+    public:
+     void showPrivateDetails(const Parcel &p){
+        cout<<"Parcel ID: "<<p.parcelID<<endl;
+        cout<<"Sender ID: "<<p.senderID<<endl;
+        cout<<"Recipient Name: "<<p.recipientName<<endl;
+        cout<<"Destination: "<<p.destinantion<<endl;
+        cout<<"Weight: "<<p.weight<<endl;
+        cout<<"Status: "<<p.status<<endl;
+     }
+};
+void inspectPracel(const Parcel &p){
+    cout<<"Parcel ID: "<<p.parcelID<<endl;
+    cout<<"Sender ID: "<<p.senderID<<endl;
+    cout<<"Recipient Name: "<<p.recipientName<<endl;
+    cout<<"Destination: "<<p.destinantion<<endl;
+    cout<<"Weight: "<<p.weight<<endl;
+    cout<<"Status: "<<p.status<<endl;
 };
 class ChronoPostSystem {
     private:
         vector<Customer> customers;
-        vector<Parcel> parcels;
+        vector<Parcel*> parcels;
         vector<Dimension> dimensions;
 
         int nextCustomerID;
@@ -96,6 +237,12 @@ class ChronoPostSystem {
             dimensions.push_back({"Parallel-7",2026,3.0});
 
         }
+        ~ChronoPostSystem() {
+            for(auto p : parcels){
+                delete p;
+            }
+        }
+
        void registerCustomer(){
         string name,home;
         cout<<"\nEnter customer name: ";
@@ -148,7 +295,7 @@ class ChronoPostSystem {
             cout<<"\nNo customers registered. Please register a customer first.\n";
             return;
         }
-        int senderID;
+        int senderID,type;
         string recipient;
         string destination;
         double weight;
@@ -193,7 +340,34 @@ class ChronoPostSystem {
             cout<<"\nWeight must be positive\n";
             return;
         }
-        parcels.emplace_back(nextParcelID++,senderID,recipient,destination,weight);
+        cout<<"\nSelect parcel type:\n";
+        cout<<"1. Normal Parcel\n";
+        cout<<"2. Fragile Parcel\n";
+        cout<<"3. Time Bound Parcel\n";
+        cout<<"4. Interdimensional Parcel\n";   
+
+        cout<<"Enter your choice: ";
+        cin>>type;
+        int id = nextParcelID++;
+        switch(type){
+            case 1:
+                parcels.push_back(new NormalParcel(id,senderID,recipient,destination,weight));
+                break;
+            case 2:
+                parcels.push_back(new FragileParcel(id,senderID,recipient,destination,weight));
+                break;
+            case 3:
+                parcels.push_back(new TimeBoundParcel(id,senderID,recipient,destination,weight));
+                break;
+            case 4:
+                parcels.push_back(new InterdimensionalParcel(id,senderID,recipient,destination,weight));
+                break;
+            default:
+                cout<<"\nInvalid parcel type\n";
+                return;
+        }
+
+        
         cout<<"\nParcel created successfully with ID: "<<nextParcelID-1<<endl;
         }
         void displayCustomers() const {
@@ -215,8 +389,45 @@ class ChronoPostSystem {
             }
             cout<<"\n"<<left<<setw(12)<<"Parcel ID"<<setw(12)<<"Sender ID"<<setw(22)<<"Recipient Name"<<setw(22)<<"Destination"<<setw(12)<<"Weight"<<"Status"<<endl;
             for(const auto &p:parcels){
-                p.display();
+                p->display();
             }
+       }
+       void advanceParcel(){
+        int id;
+        cout<<"\nEnter parcel ID to advance: ";
+        cin>>id;
+        for(auto &p:parcels){
+            if(p->getId()==id){
+                ++(*p);
+                cout<<"\nParcel status advanced to: "<<p->getStatus()<<endl;
+                return;
+            }
+        }
+        cout<<"\nParcel not found\n";
+       }
+       void inspect(){
+        int id;
+        cout<<"\nEnter parcel ID to inspect: ";
+        cin>>id;
+        for(const auto &p:parcels){
+            if(p->getId()==id){
+                inspectPracel(*p);
+                ChronoPostAdmin admin;
+                admin.showPrivateDetails(*p);
+                return;
+            }
+        }
+        cout<<"\nParcel not found\n";
+       }
+       void showBill(){
+        double a,b;
+        cout<<"\nEnter first amount: ";
+        cin>>a;
+        cout<<"\nEnter second amount: ";
+        cin>>b;
+        ShippingBill bill1(a),bill2(b);
+        ShippingBill total = bill1 + bill2;
+        cout<<"\nTotal bill: "<<static_cast<double>(total)<<endl;
        }
        void displayDimensions() const {
             cout<<"\nRegistered Dimensions:\n";
@@ -240,6 +451,9 @@ class ChronoPostSystem {
             cout << "4. View Customers\n";
             cout << "5. View Parcels\n";
             cout << "6. View Dimensions\n";
+            cout << "7. Advance Parcel Status\n";
+            cout << "8. Inspect Parcel\n";
+            cout << "9. Show Shipping Bill\n";
             cout << "0. Exit ChronoPost\n";
 
             cout << "\nEnter your choice: ";
@@ -263,6 +477,15 @@ class ChronoPostSystem {
                     break;
                 case 6:
                     displayDimensions();
+                    break;
+                case 7:
+                    advanceParcel();
+                    break;
+                case 8:
+                    inspect();
+                    break;
+                case 9:
+                    showBill();
                     break;
                 case 0:
                     cout << "\nExiting ChronoPost. Goodbye!\n";
