@@ -2,11 +2,29 @@
 #include<string>
 #include<vector>
 #include<iomanip>
+#include <stdexcept>
+#include<limits>
 using namespace std;
 struct Dimension {
     string name;
     int timelineYear;
     double distanceFactor;
+};
+class ChronoPostException :public runtime_error {
+  public:
+    ChronoPostException(const string& message) : runtime_error(message) {}
+};
+class InvalidWeightException : public ChronoPostException {
+  public:
+    InvalidWeightException() : ChronoPostException("Invalid weight: Weight must be positive.") {}
+};
+class InvalidDimensionException : public ChronoPostException {
+  public:
+    InvalidDimensionException() : ChronoPostException("Invalid dimension: Dimension not found.") {}
+};
+class TemporalAnomalyException : public ChronoPostException {
+  public:
+    TemporalAnomalyException() : ChronoPostException("Temporal anomaly detected: Parcel cannot be sent to the past.") {}
 };
 class Customer{
     private:
@@ -37,6 +55,10 @@ class Customer{
      string getName() const {
             return name;
         }
+    string getHomeDimension() const {
+            return homeDimension;
+        }
+
      void display() const {
         cout<<left<<setw(12)<<customerID<<setw(22)<<name<<homeDimension<<endl;
      }
@@ -49,6 +71,7 @@ class Parcel {
      string recipientName;
      string destinantion;
      double weight;
+     double distanceFactor;
      string status;
     public:
         Parcel(){
@@ -57,21 +80,23 @@ class Parcel {
             recipientName="Unknown";
             destinantion="Unknown";
             weight=0.0;
-            status="Registered";
+            distanceFactor=1.0;
+            status="REGISTERED";
         }
-        Parcel(int pid,int sid,string rname,string dest,double w){
+        Parcel(int pid,int sid,string rname,string dest,double w ,double df=1.0){
             parcelID=pid;
             senderID=sid;
             recipientName=rname;
             destinantion=dest;
             weight=w;
-            status="Registered";
+            distanceFactor=df;
+            status="REGISTERED";
         }
      
        virtual ~Parcel(){
         }
         virtual double calculateCharge() const{
-            return weight*10.0;
+            return weight*10.0 *distanceFactor;
         }
 
         int getId() const {
@@ -81,23 +106,23 @@ class Parcel {
                 return status;
             }
         virtual  void display() const {
-             cout<<left<<setw(12)<<parcelID<<setw(12)<<senderID<<setw(22)<<recipientName<<setw(22)<<destinantion<<setw(12)<<weight<<status<<endl;
+             cout<<left<<setw(12)<<parcelID<<setw(12)<<senderID<<setw(22)<<recipientName<<setw(22)<<destinantion<<setw(12)<<weight<<status<<fixed<<setprecision(2)<<calculateCharge()<<endl;
          }
          Parcel& operator++(){
             if(status=="REGISTERED") status = "DISPATCHED";
             return *this;
          }
-         friend void inspectPracel(const Parcel &p);
+         friend void inspectParcel(const Parcel &p);
          friend class ChronoPostSystem;
          friend class ChronoPostAdmin;
 };
 class NormalParcel : public Parcel {
     public:
-     NormalParcel(int id,int sid,string rname,string dest,double w):Parcel(id,sid,rname,dest,w){
+     NormalParcel(int id,int sid,string rname,string dest,double w , double df):Parcel(id,sid,rname,dest,w,df){
         
      }
      double calculateCharge() const override {
-        return weight * 10.0;
+        return weight * 10.0 * distanceFactor;
     }
     void display() const override{
         cout<<"Normal Parcel: ";
@@ -108,7 +133,7 @@ class Fragile: virtual public Parcel {
     public:
      Fragile() {}
      double protectionCharge() const {
-        return weight * 5.0;
+        return weight * 5.0 * distanceFactor;
      }
 
 };
@@ -116,16 +141,16 @@ class TimeBound : virtual public Parcel {
     public: 
      TimeBound(){}
      double urgencyCharge() const {
-        return weight * 8.0;
+        return weight * 8.0 * distanceFactor;
      }
 };
 class FragileParcel : public Fragile {
    public:
-    FragileParcel(int id,int sid,string rname,string dest,double w):Parcel(id,sid,rname,dest,w){
+    FragileParcel(int id,int sid,string rname,string dest,double w,double df):Parcel(id,sid,rname,dest,w,df){
         
      }
      double calculateCharge() const override {
-        return weight * 10.0 + protectionCharge();
+        return weight * 10.0 * distanceFactor + protectionCharge();
     }
     void display() const override{
         cout<<"Fragile Parcel: ";
@@ -134,11 +159,11 @@ class FragileParcel : public Fragile {
 };
 class TimeBoundParcel : public TimeBound {
     public:
-     TimeBoundParcel(int id,int sid,string rname,string dest,double w):Parcel(id,sid,rname,dest,w){
+     TimeBoundParcel(int id,int sid,string rname,string dest,double w,double df):Parcel(id,sid,rname,dest,w,df){
         
      }
      double calculateCharge() const override {
-        return weight * 10.0 + urgencyCharge();
+        return weight * 10.0 * distanceFactor + urgencyCharge();
     }
     void display() const override{
         cout<<"Time Bound Parcel: ";
@@ -148,11 +173,11 @@ class TimeBoundParcel : public TimeBound {
 
 class InterdimensionalParcel : public Fragile,public TimeBound {
     public:
-     InterdimensionalParcel(int id,int sid,string rname,string dest,double w):Parcel(id,sid,rname,dest,w){
+     InterdimensionalParcel(int id,int sid,string rname,string dest,double w,double df):Parcel(id,sid,rname,dest,w,df){
         
      }
      double calculateCharge() const override {
-        return weight * 10.0 + protectionCharge() + urgencyCharge();
+        return weight * 10.0 * distanceFactor + protectionCharge() + urgencyCharge();
     }
     void display() const override{
         cout<<"Interdimensional Parcel: ";
@@ -161,15 +186,8 @@ class InterdimensionalParcel : public Fragile,public TimeBound {
 };
 class SpecialParcel : public Fragile,public TimeBound{
     public: 
-     SpecialParcel(int id,int sid,string rname,string dest,double w){
-        parcelID=id;
-        senderID=sid;
-        recipientName=rname;
-        destinantion=dest;
-        weight=w;
-        status="Registered";
-        
-     }
+     SpecialParcel(int id, int sid, string rname, string dest, double w, double df = 1.0)
+    : Parcel(id, sid, rname, dest, w, df) {}
      void displaySpecial(){
         cout<<"Special Parcel: ";
         cout<<"Parcel ID"<< parcelID<<"Sender ID"<<senderID<<"Recipient Name"<<recipientName<<"Destination"<<destinantion<<"Weight"<<weight<<"Status"<<status<<endl;
@@ -177,13 +195,15 @@ class SpecialParcel : public Fragile,public TimeBound{
      }
      
 };
-class EmptyClass {};
 class ShippingBill {
     public:
      double amount;
      ShippingBill(double amt=0){
         amount=amt;
      }
+     ShippingBill operator+(const ShippingBill &other) const {
+        return ShippingBill(amount + other.amount);
+    }
     operator double() const {
         return amount;
     }
@@ -209,15 +229,17 @@ class ChronoPostAdmin{
         cout<<"Destination: "<<p.destinantion<<endl;
         cout<<"Weight: "<<p.weight<<endl;
         cout<<"Status: "<<p.status<<endl;
+        cout<<"Distance Factor: "<<p.distanceFactor<<endl;
      }
 };
-void inspectPracel(const Parcel &p){
+void inspectParcel(const Parcel &p){
     cout<<"Parcel ID: "<<p.parcelID<<endl;
     cout<<"Sender ID: "<<p.senderID<<endl;
     cout<<"Recipient Name: "<<p.recipientName<<endl;
     cout<<"Destination: "<<p.destinantion<<endl;
     cout<<"Weight: "<<p.weight<<endl;
     cout<<"Status: "<<p.status<<endl;
+    cout<<"Distance Factor: "<<p.distanceFactor<<endl;
 };
 class ChronoPostSystem {
     private:
@@ -227,6 +249,23 @@ class ChronoPostSystem {
 
         int nextCustomerID;
         int nextParcelID;
+
+        const Dimension* findDimension(const string &name) const{
+            for(const auto &d:dimensions){
+                if(d.name==name){
+                    return &d;
+                }
+            }
+            return nullptr;
+        }
+        const Customer* findCustomer(int id) const{
+            for(const auto &c:customers){
+                if(c.getID()==id){
+                    return &c;
+                }
+            }
+            return nullptr;
+        }
     public:
        ChronoPostSystem() {
             nextCustomerID = 1001;
@@ -244,131 +283,145 @@ class ChronoPostSystem {
         }
 
        void registerCustomer(){
-        string name,home;
-        cout<<"\nEnter customer name: ";
-        getline(cin>>ws,name);
-        cout<<"\nAvailable Dimensions:\n";
-        for(int i =0;i<dimensions.size();i++){
-            cout<<i+1<<"."<<dimensions[i].name<<endl;
-
-        }
-        cout<<"Enter home dimesnion";
-        getline(cin>>ws,home);
-        bool found = false;
-        for(const auto &d :dimensions){
-            if(d.name==home){
-                found=true;
-                break;
+        try {
+            string name,home;
+            cout<<"\nEnter customer name: ";
+            getline(cin>>ws,name);
+            if(name.empty()){
+                throw runtime_error("Customer name cannot be empty.");
             }
+            cout<<"\nAvailable Dimensions:\n";
+            displayDimensions();
+            cout<<"\nEnter home dimension: ";
+            getline(cin>>ws,home);
+            if(findDimension(home)==nullptr){
+                throw InvalidDimensionException();
+            }
+            customers.emplace_back(nextCustomerID++,name,home);
+            cout<<"\nCustomer registered successfully with ID: "<<nextCustomerID-1<<endl;
         }
-        if(!found){
-            cout<<"\nInvalid dimension\n";
-            return ;
-        }
-        customers.emplace_back(nextCustomerID++,name,home);
-        cout<<"\nCustomer registered successfully with ID: "<<nextCustomerID-1<<endl;
+       catch(const exception &e){
+        cout<<"\n Registration failed: "<<e.what()<<endl;
+       }
        }
        void registerDimension(){
-        Dimension d ;
-        cout<<"\nEnter dimension name: ";
-        getline(cin>>ws,d.name);
-        for(const auto &existing:dimensions){
-            if(existing.name==d.name){
-                cout<<"\nDimension already exists\n";
-                return;
+        try {
+            Dimension d;
+            cout<<"\nEnter dimension name: ";
+            getline(cin>>ws,d.name);
+            if(d.name.empty()){
+                throw runtime_error("Dimension name cannot be empty.");
+            }
+            if(findDimension(d.name)!=nullptr){
+                throw runtime_error("Dimension already exists.");
+            }
+            cout<<"\nEnter timeline year: ";
+            if(!(cin>>d.timelineYear)){
+                throw runtime_error("Invalid input for timeline year.");
+            }
+            cout<<"\nEnter distance factor: ";
+            if(!(cin>>d.distanceFactor)){
+                throw runtime_error("Invalid input for distance factor.");
+            }
+            if(d.distanceFactor<=0){
+                throw runtime_error("Distance factor must be positive.");
+            }
+            dimensions.push_back(d);
+            cout<<"\nDimension registered successfully.\n";
+        }
+        catch(const exception &e){
+            cout<<"\n Dimension registration failed: "<<e.what()<<endl;
+            if(cin.fail()){
+                cin.clear();
+                cin.ignore(numeric_limits<streamsize>::max(),'\n');
             }
         }
-        cout<<"\nEnter timeline year: ";
-        cin>>d.timelineYear;
-        cout<<"\nEnter distance factor: ";
-        cin>>d.distanceFactor;
-        if(d.distanceFactor<=0){
-            cout<<"\nDistance factor must be positive\n";
-            return;
-        }
-        dimensions.push_back(d);
-        cout<<"\nDimension registered successfully\n";
+       
 
        }
+
        void createParcel(){
-        if(customers.empty()){
-            cout<<"\nNo customers registered. Please register a customer first.\n";
-            return;
-        }
-        int senderID,type;
-        string recipient;
-        string destination;
-        double weight;
-        cout<<"\nnRegistered Customers:\n";
-        displayCustomers();
-        cout<<"\nEnter sender ID: ";
-        cin>>senderID;
-        bool customerFound=false;
-        for(const auto &c:customers){
-            if(c.getID()==senderID){
-                customerFound=true;
-                break;
+         try {
+            if(customers.empty()){
+                throw runtime_error("No customers registered. Please register a customer first.");
             }
-        }
-        if(!customerFound){
-            cout<<"\nSender ID not found\n";
-            return;
-        }
-        cout<<"Enter recipient name";
-        getline(cin>>ws,recipient);
-        cout<<"Available Dimensions:\n";
-        for(const auto&d : dimensions){
-            cout<<d.name<<"Year: "<<d.timelineYear<<endl;
-
-        }
-        cout<<"Enter destination dimension: ";
-        getline(cin>>ws,destination);
-        bool destinationFound=false;
-        for(const auto &d:dimensions){
-            if(d.name==destination){
-                destinationFound=true;
-                break;
+            int senderID,type;
+            string recipient,destination;
+            double weight;
+            displayCustomers();
+            cout<<"\nEnter sender ID: ";
+            if(!(cin>>senderID)){
+                throw runtime_error("Invalid input for sender ID.");
             }
-        }
-        if(!destinationFound){
-            cout<<"\nDestination dimension not found\n";
-            return;
-        }
-        cout<<"Enter weight of the parcel: ";
-        cin>>weight;
-        if(weight<=0){
-            cout<<"\nWeight must be positive\n";
-            return;
-        }
-        cout<<"\nSelect parcel type:\n";
-        cout<<"1. Normal Parcel\n";
-        cout<<"2. Fragile Parcel\n";
-        cout<<"3. Time Bound Parcel\n";
-        cout<<"4. Interdimensional Parcel\n";   
+            const Customer* sender = findCustomer(senderID);
+            if(sender==nullptr){
+                throw runtime_error("Sender ID not found.");
+            }
+            cout<<"\nEnter recipient name: ";
+            getline(cin>>ws,recipient);
+            if(recipient.empty()){
+                throw runtime_error("Recipient name cannot be empty.");
+            }
+            displayDimensions();
+            cout<<"\nEnter destination dimension: ";
+            getline(cin>>ws,destination);
+            const Dimension* destDim = findDimension(destination);
+            if(destDim==nullptr){   
+                throw InvalidDimensionException();
+            }
+            const Dimension* senderDim = findDimension(sender->getHomeDimension());
+            if(senderDim==nullptr){
+                throw InvalidDimensionException();
+            }
+            if(destDim->timelineYear < senderDim->timelineYear){
+                throw TemporalAnomalyException();
+            }
+            cout<<"\nEnter weight (kg): ";
+            if(!(cin>>weight)){
+                throw runtime_error("Invalid input for weight.");
+            }
+            if(weight<=0){
+                throw InvalidWeightException();
+            }
+             cout<<"\nSelect parcel type:\n";
+             cout<<"1. Normal Parcel\n";
+             cout<<"2. Fragile Parcel\n";
+             cout<<"3. Time Bound Parcel\n";
+             cout<<"4. Interdimensional Parcel\n";   
 
-        cout<<"Enter your choice: ";
-        cin>>type;
-        int id = nextParcelID++;
+             cout<<"Enter your choice: ";
+             if(!(cin>>type)){
+                throw runtime_error("Invalid input for parcel type.");
+             }
+             int id = nextParcelID++;
+             double factor= destDim->distanceFactor;
         switch(type){
             case 1:
-                parcels.push_back(new NormalParcel(id,senderID,recipient,destination,weight));
+                parcels.push_back(new NormalParcel(id,senderID,recipient,destination,weight,factor));
                 break;
             case 2:
-                parcels.push_back(new FragileParcel(id,senderID,recipient,destination,weight));
+                parcels.push_back(new FragileParcel(id,senderID,recipient,destination,weight,factor));
                 break;
             case 3:
-                parcels.push_back(new TimeBoundParcel(id,senderID,recipient,destination,weight));
+                parcels.push_back(new TimeBoundParcel(id,senderID,recipient,destination,weight,factor));
                 break;
             case 4:
-                parcels.push_back(new InterdimensionalParcel(id,senderID,recipient,destination,weight));
+                parcels.push_back(new InterdimensionalParcel(id,senderID,recipient,destination,weight,factor));
                 break;
             default:
-                cout<<"\nInvalid parcel type\n";
-                return;
+              nextParcelID--; 
+                throw ChronoPostException("Invalid parcel type selected.");
         }
-
-        
-        cout<<"\nParcel created successfully with ID: "<<nextParcelID-1<<endl;
+        cout<<"\nParcel created successfully with ID: "<<id<<endl;
+        cout<<"\nShipping Charge: "<<parcels.back()->calculateCharge()<<endl;
+         }
+         catch(const exception &e){
+            cout<<"\n Parcel creation failed: "<<e.what()<<endl;
+            if(cin.fail()){
+                cin.clear();
+                cin.ignore(numeric_limits<streamsize>::max(),'\n');
+            }
+         }
         }
         void displayCustomers() const {
             if(customers.empty()){
@@ -392,10 +445,22 @@ class ChronoPostSystem {
                 p->display();
             }
        }
+       void displayDimensions() const {
+            cout<<"\nRegistered Dimensions:\n";
+            cout<<"\n"<<left<<setw(22)<<"Dimension Name"<<"Timeline Year"<<"Distance Factor"<<endl;
+            for(const auto &d:dimensions){
+                cout<<left<<setw(22)<<d.name<<d.timelineYear<<setw(12)<<d.distanceFactor<<endl;
+            }
+       }
        void advanceParcel(){
         int id;
         cout<<"\nEnter parcel ID to advance: ";
-        cin>>id;
+        if(!(cin >> id)) {
+    cout << "\nInvalid parcel ID.\n";
+    cin.clear();
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    return;
+}
         for(auto &p:parcels){
             if(p->getId()==id){
                 ++(*p);
@@ -408,10 +473,15 @@ class ChronoPostSystem {
        void inspect(){
         int id;
         cout<<"\nEnter parcel ID to inspect: ";
-        cin>>id;
+       if(!(cin>>id)){
+            cout<<"\nInvalid input for parcel ID.\n";
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(),'\n');
+            return;
+        }
         for(const auto &p:parcels){
             if(p->getId()==id){
-                inspectPracel(*p);
+               inspectParcel(*p);
                 ChronoPostAdmin admin;
                 admin.showPrivateDetails(*p);
                 return;
@@ -429,13 +499,7 @@ class ChronoPostSystem {
         ShippingBill total = bill1 + bill2;
         cout<<"\nTotal bill: "<<static_cast<double>(total)<<endl;
        }
-       void displayDimensions() const {
-            cout<<"\nRegistered Dimensions:\n";
-            cout<<"\n"<<left<<setw(22)<<"Dimension Name"<<"Timeline Year"<<"Distance Factor"<<endl;
-            for(const auto &d:dimensions){
-                cout<<left<<setw(22)<<d.name<<d.timelineYear<<setw(12)<<d.distanceFactor<<endl;
-            }
-       }
+      
        void menu (){
         int choice;
         do{
@@ -457,7 +521,18 @@ class ChronoPostSystem {
             cout << "0. Exit ChronoPost\n";
 
             cout << "\nEnter your choice: ";
-            cin >> choice;
+           if(!(cin >> choice)) {
+    cout << "\nPlease enter a valid numeric choice.\n";
+    cin.clear();
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    continue;
+}
+if(!(cin >> choice)) {
+    cout << "\nPlease enter a valid numeric choice.\n";
+    cin.clear();
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    continue;
+}
            
             switch (choice) {
                 case 1:
